@@ -1,0 +1,95 @@
+version: '3.8'
+services:
+  postgresql:
+    platform: linux/arm64
+    image: postgres:13-alpine
+    container_name: temporal-postgresql
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgresql-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  temporal:
+    platform: linux/arm64
+    image: temporalio/auto-setup:1.20.0
+    container_name: temporal
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgresql
+      - ENABLE_ES=false
+      - ENABLE_ARCHIVAL=false
+      - SKIP_SCHEMA_SETUP=false
+    ports:
+      - "7233:7233"
+    healthcheck:
+      test: ["CMD", "tctl", "--address", "temporal:7233", "namespace", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  temporal-ui:
+    platform: linux/arm64
+    image: temporalio/ui:2.21.3
+    container_name: temporal-ui
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    ports:
+      - "8080:8080"
+
+  redis:
+    platform: linux/arm64
+    image: redis:alpine
+    container_name: temporal-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: Dockerfile.arm64
+    container_name: temporal-app
+    environment:
+      - NODE_ENV=development
+      - TEMPORAL_ADDRESS=temporal:7233
+      - REDIS_URL=redis://redis:6379
+      - PORT=3000
+      - GOOGLE_API_KEY=your_google_api_key_here  # Add this line
+    ports:
+      - "3000:3000"
+    depends_on:
+      temporal:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: on-failure
+
+volumes:
+  postgresql-data:
+  redis-data:

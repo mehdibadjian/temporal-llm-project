@@ -1,0 +1,6 @@
+frontend.enableClientVersionCheck:
+  - value: true
+    constraints: {}
+history.enableReadFromClosedExecutionV2:
+  - value: true
+    constraints: {}
