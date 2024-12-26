@@ -1,78 +1,46 @@
-import dotenv from 'dotenv';
-import path from 'path';
-import { Worker, NativeConnection } from '@temporalio/worker';
+import { Worker } from '@temporalio/worker';
 import { Activities } from './activities/llmActivities';
+import { OrchestrationActivities } from './orchestrator/orchestrationActivities';
 import { LLM_TASK_QUEUE } from './shared/constants';
 import { startServer } from './api/server';
 
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-
-async function main() {
+export async function run(): Promise<void> {
+  console.log('Starting application...');
+  
   try {
-    // Add retry logic for connecting to Temporal
-    let connection;
-    let retries = 0;
-    const maxRetries = 5;
-
-    while (retries < maxRetries) {
-      try {
-        connection = await NativeConnection.connect({
-          address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
-          // Remove TLS configuration since we're not using it
-        });
-        console.log('Successfully connected to Temporal');
-        break;
-      } catch (error) {
-        retries++;
-        console.log(`Failed to connect to Temporal. Retry ${retries}/${maxRetries}`);
-        if (retries === maxRetries) throw error;
-        // Wait before retrying
-        await new Promise(resolve => setTimeout(resolve, 5000));
-      }
-    }
-
-    if (!connection) {
-      throw new Error('Failed to establish connection to Temporal server');
-    }
-
-    // Start the Temporal Worker
+    // Create and run Temporal worker
     const worker = await Worker.create({
-      connection,
-      namespace: 'default',
+      workflowsPath: require.resolve('./workflows'),
+      activities: {
+        ...Activities,
+        ...OrchestrationActivities,
+      },
       taskQueue: LLM_TASK_QUEUE,
-      workflowsPath: require.resolve('./workflows/llmWorkflow'),
-      activities: Activities,
     });
 
-    console.log('Starting worker and API server...');
-
-    // Start both the worker and API server
+    // Start the worker
     await Promise.all([
       worker.run(),
-      startServer()
+      startServer(3000)
     ]);
 
-    console.log('Worker and API server started successfully');
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Application startup failed';
-    console.error(errorMessage);
+    console.log('Application started successfully');
+  } catch (error) {
+    console.error('Error starting the application:', error);
     process.exit(1);
   }
 }
 
-// Handle process termination
-process.on('SIGINT', () => {
-  console.log('Shutting down...');
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-  console.log('Shutting down...');
-  process.exit(0);
-});
-
-// Start the application
-main().catch((error: unknown) => {
-  console.error('Fatal error:', error);
+// Handle unhandled rejections
+process.on('unhandledRejection', (error: Error) => {
+  console.error('Unhandled rejection:', error);
   process.exit(1);
 });
+
+// Only run if this file is being run directly
+if (require.main === module) {
+  run().catch((error: Error) => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  });
+}

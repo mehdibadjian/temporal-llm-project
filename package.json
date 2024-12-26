@@ -5,8 +5,11 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsc && ts-node src/index.ts"
+    "start": "node dist/src/index.js",
+    "dev": "ts-node src/index.ts",
+    "clean": "rimraf dist",
+    "prebuild": "npm run clean",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@google/generative-ai": "^0.1.3",

@@ -1,14 +1,22 @@
-import * as wf from '@temporalio/workflow';
-import type { LLMRequest } from '../activities/llmActivities';
+import { proxyActivities } from '@temporalio/workflow';
+import type { Activities } from '../activities/llmActivities';
+import type { OrchestrationActivities } from '../orchestrator/orchestrationActivities';
 
-const { generateResponse } = wf.proxyActivities<typeof import('../activities/llmActivities').Activities>({
+const activities = proxyActivities<
+  typeof Activities & typeof OrchestrationActivities
+>({
   startToCloseTimeout: '10 minutes',
   retry: {
     maximumAttempts: 3,
-    initialInterval: '1 second',
   },
 });
 
-export async function startLLMWorkflow(request: LLMRequest): Promise<string> {
-  return await generateResponse(request);
+export async function llmWorkflow(request: string): Promise<string> {
+  try {
+    // Use the orchestration activity
+    return await activities.orchestrateRequest(request);
+  } catch (error) {
+    console.error('Workflow error:', error);
+    throw error;
+  }
 }
